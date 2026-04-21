@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mammography clock-face localizer</title>
+<style>
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #262626;
+    --bg-panel: #141519;
+    --border: #333;
+    --text-primary: #e8e8e8;
+    --text-secondary: #a0a0a0;
+    --text-tertiary: #6a6a63;
+    --accent: #5088d2;
+    --ok: #5cb256;
+    --bad: #d24b4b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg-primary); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); margin: 0 0 20px; font-size: 13px; }
+  .cfl-root { display: flex; flex-direction: column; gap: 12px; }
+  .cfl-controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 10px 14px; background: var(--bg-secondary); border-radius: 8px; font-size: 13px; }
+  .cfl-controls label { color: var(--text-secondary); }
+  .cfl-controls select, .cfl-controls button { background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); padding: 5px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .cfl-controls button:hover:not(:disabled) { border-color: var(--text-tertiary); }
+  .cfl-controls select:disabled, .cfl-controls input:disabled, .cfl-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cfl-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+  .cfl-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; padding: 6px 10px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; font-weight: 500; color: var(--text-primary); }
+  .cfl-toggle:hover { border-color: var(--text-tertiary); }
+  .cfl-toggle input { margin: 0; cursor: pointer; width: 14px; height: 14px; }
+  .cfl-btn-primary { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; font-weight: 500; }
+  .cfl-btn-primary:hover:not(:disabled) { background: #6699e0 !important; border-color: #6699e0 !important; }
+  .cfl-views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 720px) { .cfl-views { grid-template-columns: 1fr; } }
+  .cfl-view { background: var(--bg-panel); border: 0.5px solid var(--border); border-radius: 12px; padding: 10px; }
+  .cfl-view-title { font-size: 12px; font-weight: 500; text-align: center; margin: 0 0 4px; color: #8c8c85; letter-spacing: 0.04em; }
+  .cfl-svg { width: 100%; display: block; cursor: crosshair; user-select: none; }
+  .cfl-view.quiz-mode .cfl-svg { cursor: default; }
+  .cfl-hint { font-size: 11px; color: var(--text-tertiary); text-align: center; margin: 6px 0 0; }
+  .cfl-result { display: grid; grid-template-columns: 180px 1fr; gap: 16px; background: var(--bg-secondary); border-radius: 8px; padding: 14px; align-items: center; }
+  @media (max-width: 540px) { .cfl-result { grid-template-columns: 1fr; } }
+  .cfl-label { font-size: 12px; color: var(--text-secondary); margin: 0; }
+  .cfl-big { font-size: 24px; font-weight: 500; margin: 2px 0 10px; }
+  .cfl-sm { font-size: 14px; margin: 2px 0 10px; }
+  .cfl-view-used { font-size: 11px; color: var(--text-tertiary); font-style: italic; margin: -6px 0 10px; }
+  /* Quiz */
+  .cfl-quiz { background: var(--bg-secondary); border-radius: 8px; padding: 16px; }
+  .quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .quiz-info { font-size: 13px; color: var(--text-secondary); }
+  .quiz-info b { color: var(--text-primary); text-transform: capitalize; }
+  .quiz-score { font-size: 14px; color: var(--text-secondary); }
+  .quiz-score b { color: var(--text-primary); font-size: 16px; font-weight: 500; }
+  .quiz-prompt { font-size: 15px; font-weight: 500; margin: 0 0 12px; text-align: center; }
+  .quiz-answers { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; margin-bottom: 12px; }
+  @media (max-width: 720px) { .quiz-answers { grid-template-columns: repeat(6, 1fr); } }
+  .quiz-answer-btn { padding: 10px 0; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .quiz-answer-btn:hover:not(:disabled) { background: var(--bg-panel); border-color: var(--accent); }
+  .quiz-answer-btn:disabled { cursor: not-allowed; }
+  .quiz-answer-btn.correct { background: var(--ok) !important; color: #fff; border-color: var(--ok); }
+  .quiz-answer-btn.incorrect { background: var(--bad) !important; color: #fff; border-color: var(--bad); }
+  .quiz-feedback { text-align: center; font-size: 14px; min-height: 22px; margin: 0 0 10px; }
+  .quiz-feedback.correct { color: var(--ok); font-weight: 500; }
+  .quiz-feedback.incorrect { color: var(--bad); font-weight: 500; }
+  .quiz-feedback.revealed { color: var(--text-secondary); font-style: italic; }
+  .quiz-actions { display: flex; gap: 10px; justify-content: center; }
+  .quiz-actions button { background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .quiz-actions button:hover { border-color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Mammography clock-face localizer</h1>
+  <p class="subtitle">Click the lesion on CC, then on MLO or true lateral — the widget computes clock-face position. Or switch to quiz mode to test yourself.</p>
+  <div class="cfl-root">
+    <div class="cfl-controls">
+      <label for="cfl-side">Breast</label>
+      <select id="cfl-side"><option value="right">Right</option><option value="left">Left</option></select>
+      <label for="cfl-angle">MLO angle</label>
+      <input type="range" id="cfl-angle" value="45" min="20" max="75" step="1" style="width: 140px;" />
+      <span id="cfl-angle-out" style="font-size:13px; font-weight:500; min-width: 34px;">45°</span>
+      <span class="cfl-divider"></span>
+      <label class="cfl-toggle"><input type="checkbox" id="cfl-show-numbers" checked/>Show clock numbers on breast</label>
+      <button id="cfl-reset">Reset clicks</button>
+      <span class="cfl-divider"></span>
+      <button id="cfl-quiz-toggle" class="cfl-btn-primary">Start quiz</button>
+    </div>
+    <div class="cfl-views">
+      <div class="cfl-view" id="cfl-view-cc"><p class="cfl-view-title">CC — craniocaudal</p><svg id="cfl-cc" class="cfl-svg" viewBox="0 0 300 300"></svg><p class="cfl-hint">Click lesion on CC</p></div>
+      <div class="cfl-view" id="cfl-view-mlo"><p class="cfl-view-title">MLO — mediolateral oblique</p><svg id="cfl-mlo" class="cfl-svg" viewBox="0 0 300 300"></svg><p class="cfl-hint">Click lesion on MLO</p></div>
+      <div class="cfl-view" id="cfl-view-tl"><p class="cfl-view-title">True lateral (ML / 90°)</p><svg id="cfl-tl" class="cfl-svg" viewBox="0 0 300 300"></svg><p class="cfl-hint">Click lesion on true lateral</p></div>
+    </div>
+    <div class="cfl-result" id="cfl-result-panel">
+      <svg id="cfl-clock" viewBox="0 0 200 200" style="width: 180px; height: 180px;"></svg>
+      <div>
+        <p class="cfl-label">Clock position</p>
+        <p class="cfl-big" id="cfl-clockval">—</p>
+        <p class="cfl-view-used" id="cfl-viewused"></p>
+        <p class="cfl-label">Quadrant</p>
+        <p class="cfl-sm" id="cfl-quadrant">—</p>
+        <p class="cfl-label">Approximate distance from nipple</p>
+        <p class="cfl-sm" id="cfl-distance">—</p>
+      </div>
+    </div>
+    <div class="cfl-quiz" id="cfl-quiz-panel" style="display:none;">
+      <div class="quiz-header">
+        <span class="quiz-info">Side: <b id="quiz-side-display">—</b> &nbsp;·&nbsp; MLO angle: <b id="quiz-angle-display">—°</b></span>
+        <span class="quiz-score">Score: <b id="quiz-score">0 / 0</b></span>
+      </div>
+      <p class="quiz-prompt">At what clock position is the lesion?</p>
+      <div class="quiz-answers" id="quiz-answers"></div>
+      <p class="quiz-feedback" id="quiz-feedback"></p>
+      <div class="quiz-actions">
+        <button id="cfl-quiz-reveal">Reveal answer</button>
+        <button id="cfl-quiz-next" class="cfl-btn-primary" style="display:none;">Next question</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  const state = {
+    side: 'right', mloAngleDeg: 45,
+    ccClick: null, mloClick: null, tlClick: null,
+    showNumbers: true,
+    quizMode: false, quizQuestion: null, quizSelected: null, quizRevealed: false,
+    quizScore: { correct: 0, total: 0 }
+  };
+  const CC_N_R = { x: 40, y: 150 }, CC_N_L = { x: 260, y: 150 };
+  const ML_N_R = { x: 35, y: 148 }, ML_N_L = { x: 265, y: 148 };
+  const PX_TO_MM = 0.5;
+  const CROSS = '#ff6b3d', FBR = '#bcbcb4', FPEC = '#dad8cd', WT = '#ece9e0', DOT = '#e76b2b';
+  const PTY = 5;
+
+  const CLOCK = [
+    { h:12, m:0,   y:70,    z:82  }, { h:1,  m:30,  y:52,    z:72  },
+    { h:2,  m:62,  y:35.8,  z:78  }, { h:3,  m:100, y:0,     z:192 },
+    { h:4,  m:62,  y:-35.8, z:160 }, { h:5,  m:30,  y:-52,   z:165 },
+    { h:6,  m:0,   y:-70,   z:168 }, { h:7,  m:-28, y:-48.5, z:165 },
+    { h:8,  m:-58, y:-33.5, z:160 }, { h:9,  m:-98, y:0,     z:192 },
+    { h:10, m:-58, y:33.5,  z:78  }, { h:11, m:-28, y:48.5,  z:72  }
+  ];
+  const mirrorHour = h => ((12 - h) % 12) || 12;
+  const clockColor = n => (n===11||n===12||n===1||n===2) ? '#e8a73a' : (n===9||n===10||n===3) ? '#5cb256' : '#5088d2';
+
+  function getClockPositions(view, isR, phi) {
+    const ny = view==='cc' ? 150 : 148;
+    const nx = view==='cc' ? (isR?40:260) : (isR?35:265);
+    return CLOCK.map(c => {
+      let sx, sy;
+      if (view === 'cc') {
+        sy = ny + c.m;
+        sx = isR ? nx + c.z : nx - c.z;
+      } else if (view === 'mlo') {
+        const dv = c.m * Math.cos(phi) + c.y * Math.sin(phi);
+        sy = ny - dv;
+        sx = isR ? nx + c.z : nx - c.z;
+      } else {
+        sy = ny - c.y;
+        const baseX = isR ? nx + c.z : nx - c.z;
+        const dx = (c.h >= 1 && c.h <= 5) ? 8 : (c.h >= 7 && c.h <= 11) ? -8 : 0;
+        sx = baseX + (isR ? dx : -dx);
+      }
+      return { h: isR ? c.h : mirrorHour(c.h), x: sx, y: sy };
+    });
+  }
+
+  function projectQuiz(q, view) {
+    const isR = q.side === 'right';
+    const ny = view === 'cc' ? 150 : 148;
+    const nx = view === 'cc' ? (isR ? 40 : 260) : (isR ? 35 : 265);
+    let sx, sy;
+    if (view === 'cc') {
+      sy = ny + q.m;
+      sx = isR ? nx + q.z : nx - q.z;
+    } else if (view === 'mlo') {
+      const phi = q.angleDeg * Math.PI / 180;
+      const dv = q.m * Math.cos(phi) + q.y * Math.sin(phi);
+      sy = ny - dv;
+      sx = isR ? nx + q.z : nx - q.z;
+    } else {
+      sy = ny - q.y;
+      sx = isR ? nx + q.z : nx - q.z;
+    }
+    return { x: sx, y: sy };
+  }
+
+  function generateQuiz() {
+    const targetHour = 1 + Math.floor(Math.random() * 12);
+    const side = Math.random() < 0.5 ? 'right' : 'left';
+    const angleDeg = 45;
+    const thetaRad = targetHour * 30 * Math.PI / 180;
+    const d = 45 + Math.random() * 45;
+    const y = d * Math.cos(thetaRad);
+    const m = (side === 'right' ? 1 : -1) * d * Math.sin(thetaRad);
+    const z = 95 + Math.random() * 90;
+    return { targetHour, side, angleDeg, m, y, z };
+  }
+
+  const svCC = document.getElementById('cfl-cc'), svML = document.getElementById('cfl-mlo'),
+        svTL = document.getElementById('cfl-tl'), svCK = document.getElementById('cfl-clock');
+  const ccN = () => state.side==='right' ? CC_N_R : CC_N_L;
+  const mlN = () => state.side==='right' ? ML_N_R : ML_N_L;
+  const tlN = () => state.side==='right' ? ML_N_R : ML_N_L;
+
+  function svgCoords(svg, e) {
+    const p = svg.createSVGPoint();
+    p.x = e.clientX; p.y = e.clientY;
+    return p.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function crosshair(cx, cy) {
+    return `<g pointer-events="none"><circle cx="${cx}" cy="${cy}" r="8" fill="none" stroke="${CROSS}" stroke-width="2"/><line x1="${cx-12}" y1="${cy}" x2="${cx+12}" y2="${cy}" stroke="${CROSS}" stroke-width="1.2"/><line x1="${cx}" y1="${cy-12}" x2="${cx}" y2="${cy+12}" stroke="${CROSS}" stroke-width="1.2"/></g>`;
+  }
+  function numbersShouldShow() {
+    return state.showNumbers && (!state.quizMode || state.quizRevealed);
+  }
+
+  function drawCC() {
+    const isR = state.side === 'right';
+    let h = '';
+    const path = isR
+      ? 'M 270 25 C 170 18, 60 62, 56 138 Q 40 143, 40 150 Q 40 157, 56 162 C 60 242, 170 282, 270 275 L 270 25 Z'
+      : 'M 30 25 C 130 18, 240 62, 244 138 Q 260 143, 260 150 Q 260 157, 244 162 C 240 242, 130 282, 30 275 L 30 25 Z';
+    h += `<path d="${path}" fill="${FBR}"/>`;
+    h += `<line x1="2" y1="150" x2="298" y2="150" stroke="${DOT}" stroke-dasharray="0 5" stroke-linecap="round" stroke-width="2.3" opacity="0.95"/>`;
+    h += `<text x="150" y="23" text-anchor="middle" font-size="17" font-weight="500" fill="${WT}">Outer</text>`;
+    h += `<text x="150" y="293" text-anchor="middle" font-size="17" font-weight="500" fill="${WT}">Inner</text>`;
+    if (numbersShouldShow()) {
+      for (const p of getClockPositions('cc', isR, 0)) {
+        h += `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="${WT}">${p.h}</text>`;
+      }
+    }
+    if (state.quizMode && state.quizQuestion) {
+      const p = projectQuiz(state.quizQuestion, 'cc');
+      h += crosshair(p.x, p.y);
+    } else if (state.ccClick) {
+      h += crosshair(state.ccClick.x, state.ccClick.y);
+    }
+    svCC.innerHTML = h;
+  }
+
+  function drawMLO() {
+    const isR = state.side === 'right';
+    const n = mlN();
+    const phi = state.mloAngleDeg * Math.PI / 180;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    const cw = isR ? 272 : 28;
+    const pax = isR ? 175 : 125;
+    const hd = Math.abs(cw - pax);
+    const yb = Math.min(258, PTY + hd * cp / sp);
+    let h = '';
+    const sil = isR
+      ? `M 35 148 Q 35 138, 52 138 C 55 80, 100 15, 175 5 L ${cw} ${yb} L ${cw} 250 Q 268 268, 240 268 C 200 282, 115 262, 68 212 C 52 194, 42 170, 50 158 Q 35 158, 35 148 Z`
+      : `M 265 148 Q 265 138, 248 138 C 245 80, 200 15, 125 5 L ${cw} ${yb} L ${cw} 250 Q 32 268, 60 268 C 100 282, 185 262, 232 212 C 248 194, 258 170, 250 158 Q 265 158, 265 148 Z`;
+    h += `<path d="${sil}" fill="${FBR}"/>`;
+    h += `<path d="M ${pax} ${PTY} L ${cw} ${PTY} L ${cw} ${yb} Z" fill="${FPEC}"/>`;
+    h += `<line x1="${pax}" y1="${PTY}" x2="${cw}" y2="${yb}" stroke="#2a2a27" stroke-width="0.9"/>`;
+    const ctx = (pax + 2*cw) / 3;
+    const cty = (2*PTY + yb) / 3;
+    const lx = ctx + 4 * (isR ? sp : -sp);
+    const ly = cty - 4 * cp;
+    const lr = isR ? (90 - state.mloAngleDeg) : (state.mloAngleDeg - 90);
+    h += `<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" transform="rotate(${lr} ${lx} ${ly})" font-size="8" font-weight="500" fill="${WT}">Pectoralis</text>`;
+    h += `<line x1="2" y1="${n.y}" x2="298" y2="${n.y}" stroke="${DOT}" stroke-dasharray="0 5" stroke-linecap="round" stroke-width="2.3" opacity="0.95"/>`;
+    const pEx = n.x + 200 * (isR ? cp : -cp);
+    const pEy = n.y - 200 * sp;
+    h += `<line x1="${n.x}" y1="${n.y}" x2="${pEx}" y2="${pEy}" stroke="${DOT}" stroke-dasharray="0 5" stroke-linecap="round" stroke-width="2.3" opacity="0.95"/>`;
+    if (numbersShouldShow()) {
+      for (const p of getClockPositions('mlo', isR, phi)) {
+        h += `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="${clockColor(p.h)}">${p.h}</text>`;
+      }
+    }
+    if (state.quizMode && state.quizQuestion) {
+      const p = projectQuiz(state.quizQuestion, 'mlo');
+      h += crosshair(p.x, p.y);
+    } else if (state.mloClick) {
+      h += crosshair(state.mloClick.x, state.mloClick.y);
+    }
+    svML.innerHTML = h;
+  }
+
+  function drawTL() {
+    const isR = state.side === 'right';
+    const n = tlN();
+    const cw = isR ? 272 : 28;
+    let h = '';
+    const sil = isR
+      ? `M 35 148 Q 35 138, 52 138 C 55 80, 160 10, 272 8 L 272 250 Q 268 268, 240 268 C 200 282, 115 262, 68 212 C 52 194, 42 170, 50 158 Q 35 158, 35 148 Z`
+      : `M 265 148 Q 265 138, 248 138 C 245 80, 140 10, 28 8 L 28 250 Q 32 268, 60 268 C 100 282, 185 262, 232 212 C 248 194, 258 170, 250 158 Q 265 158, 265 148 Z`;
+    h += `<path d="${sil}" fill="${FBR}"/>`;
+    h += `<line x1="${cw}" y1="8" x2="${cw}" y2="250" stroke="#2a2a27" stroke-width="0.7" opacity="0.6"/>`;
+    h += `<line x1="2" y1="${n.y}" x2="298" y2="${n.y}" stroke="${DOT}" stroke-dasharray="0 5" stroke-linecap="round" stroke-width="2.3" opacity="0.95"/>`;
+    if (numbersShouldShow()) {
+      for (const p of getClockPositions('tl', isR, 0)) {
+        h += `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="${clockColor(p.h)}">${p.h}</text>`;
+      }
+    }
+    if (state.quizMode && state.quizQuestion) {
+      const p = projectQuiz(state.quizQuestion, 'tl');
+      h += crosshair(p.x, p.y);
+    } else if (state.tlClick) {
+      h += crosshair(state.tlClick.x, state.tlClick.y);
+    }
+    svTL.innerHTML = h;
+  }
+
+  function compute() {
+    if (!state.ccClick) return null;
+    const cn = ccN();
+    const m = state.ccClick.y - cn.y;
+    const rz = state.ccClick.x - cn.x;
+    const z = state.side === 'right' ? rz : -rz;
+    let y, viewUsed;
+    if (state.tlClick) {
+      y = tlN().y - state.tlClick.y;
+      viewUsed = 'CC + true lateral';
+    } else if (state.mloClick) {
+      const phi = state.mloAngleDeg * Math.PI / 180;
+      const dv = mlN().y - state.mloClick.y;
+      y = (dv - m * Math.cos(phi)) / Math.sin(phi);
+      viewUsed = `CC + MLO (${state.mloAngleDeg}°)`;
+    } else {
+      return null;
+    }
+    const theta = state.side === 'right' ? Math.atan2(m, y) : Math.atan2(-m, y);
+    let hours = theta * 12 / (2 * Math.PI);
+    if (hours < 0) hours += 12;
+    if (hours >= 12) hours -= 12;
+    const distMm = Math.sqrt(m*m + y*y + z*z) * PX_TO_MM;
+    return { hours, distMm, viewUsed };
+  }
+  function fmtClock(hours) {
+    let hh = Math.round(hours);
+    if (hh >= 12) hh -= 12;
+    if (hh <= 0) hh += 12;
+    return `${hh} o'clock`;
+  }
+  function getQuadrant(hours, side) {
+    const h = hours === 12 ? 0 : hours;
+    if (side === 'right') {
+      if (h < 3) return 'Upper inner (UIQ)';
+      if (h < 6) return 'Lower inner (LIQ)';
+      if (h < 9) return 'Lower outer (LOQ)';
+      return 'Upper outer (UOQ)';
+    } else {
+      if (h < 3) return 'Upper outer (UOQ)';
+      if (h < 6) return 'Lower outer (LOQ)';
+      if (h < 9) return 'Lower inner (LIQ)';
+      return 'Upper inner (UIQ)';
+    }
+  }
+  function drawClock(hours) {
+    const cx = 100, cy = 100, r = 75;
+    let h = '';
+    h += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--bg-primary)" stroke="var(--text-tertiary)" stroke-width="1"/>`;
+    for (let i = 1; i <= 12; i++) {
+      const a = i * 30 * Math.PI / 180;
+      const maj = i % 3 === 0;
+      const ri = maj ? r - 10 : r - 5;
+      h += `<line x1="${cx + ri * Math.sin(a)}" y1="${cy - ri * Math.cos(a)}" x2="${cx + r * Math.sin(a)}" y2="${cy - r * Math.cos(a)}" stroke="var(--text-secondary)" stroke-width="${maj ? 1.5 : 0.5}"/>`;
+      if (maj) {
+        const lr = r - 20;
+        h += `<text x="${cx + lr * Math.sin(a)}" y="${cy - lr * Math.cos(a) + 4}" text-anchor="middle" font-size="12" font-weight="500" fill="var(--text-secondary)">${i}</text>`;
+      }
+    }
+    const rL = state.side === 'right' ? 'med' : 'lat';
+    const lL = state.side === 'right' ? 'lat' : 'med';
+    h += `<text x="${cx}" y="15" text-anchor="middle" font-size="9" fill="var(--text-tertiary)">sup</text>`;
+    h += `<text x="${cx}" y="195" text-anchor="middle" font-size="9" fill="var(--text-tertiary)">inf</text>`;
+    h += `<text x="${cx + r + 10}" y="${cy + 4}" text-anchor="start" font-size="9" fill="var(--text-tertiary)">${rL}</text>`;
+    h += `<text x="${cx - r - 10}" y="${cy + 4}" text-anchor="end" font-size="9" fill="var(--text-tertiary)">${lL}</text>`;
+    if (hours !== null && !isNaN(hours)) {
+      const a = hours * 30 * Math.PI / 180;
+      h += `<line x1="${cx}" y1="${cy}" x2="${cx + (r - 12) * Math.sin(a)}" y2="${cy - (r - 12) * Math.cos(a)}" stroke="${CROSS}" stroke-width="2.5" stroke-linecap="round"/>`;
+      h += `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${CROSS}"/>`;
+    } else {
+      h += `<circle cx="${cx}" cy="${cy}" r="2.5" fill="var(--text-tertiary)"/>`;
+    }
+    svCK.innerHTML = h;
+  }
+  function updateResultPanel() {
+    const r = compute();
+    const cv = document.getElementById('cfl-clockval');
+    const vu = document.getElementById('cfl-viewused');
+    const qv = document.getElementById('cfl-quadrant');
+    const dv = document.getElementById('cfl-distance');
+    if (r && !isNaN(r.hours)) {
+      cv.textContent = fmtClock(r.hours);
+      vu.textContent = `Computed from ${r.viewUsed}`;
+      qv.textContent = getQuadrant(r.hours, state.side);
+      dv.textContent = `${Math.round(r.distMm)} mm (schematic scale)`;
+      drawClock(r.hours);
+    } else {
+      cv.textContent = '—'; vu.textContent = ''; qv.textContent = '—'; dv.textContent = '—';
+      drawClock(null);
+    }
+  }
+
+  // Quiz
+  function startQuiz() {
+    state.quizMode = true;
+    state.ccClick = null; state.mloClick = null; state.tlClick = null;
+    state.quizScore = { correct: 0, total: 0 };
+    nextQuestion();
+  }
+  function endQuiz() {
+    state.quizMode = false;
+    state.quizQuestion = null;
+    state.quizSelected = null;
+    state.quizRevealed = false;
+    updateUI();
+    redraw();
+  }
+  function nextQuestion() {
+    const q = generateQuiz();
+    state.quizQuestion = q;
+    state.side = q.side;
+    state.mloAngleDeg = q.angleDeg;
+    state.quizSelected = null;
+    state.quizRevealed = false;
+    document.getElementById('cfl-angle').value = q.angleDeg;
+    document.getElementById('cfl-angle-out').textContent = q.angleDeg + '°';
+    document.getElementById('cfl-side').value = q.side;
+    updateUI();
+    redraw();
+  }
+  function submitAnswer(h) {
+    if (!state.quizMode || state.quizRevealed) return;
+    state.quizSelected = h;
+    state.quizRevealed = true;
+    state.quizScore.total += 1;
+    if (h === state.quizQuestion.targetHour) state.quizScore.correct += 1;
+    updateUI();
+    redraw();
+  }
+  function revealAnswer() {
+    if (!state.quizMode || state.quizRevealed) return;
+    state.quizSelected = null;
+    state.quizRevealed = true;
+    state.quizScore.total += 1;
+    updateUI();
+    redraw();
+  }
+  function buildAnswerButtons() {
+    const wrap = document.getElementById('quiz-answers');
+    wrap.innerHTML = '';
+    for (let i = 1; i <= 12; i++) {
+      const b = document.createElement('button');
+      b.className = 'quiz-answer-btn';
+      b.dataset.h = i;
+      b.textContent = i;
+      b.addEventListener('click', () => submitAnswer(i));
+      wrap.appendChild(b);
+    }
+  }
+  function updateUI() {
+    const resultPanel = document.getElementById('cfl-result-panel');
+    const quizPanel = document.getElementById('cfl-quiz-panel');
+    const toggleBtn = document.getElementById('cfl-quiz-toggle');
+    const sideSel = document.getElementById('cfl-side');
+    const angleInp = document.getElementById('cfl-angle');
+    const resetBtn = document.getElementById('cfl-reset');
+    const showNumCb = document.getElementById('cfl-show-numbers');
+    const views = [document.getElementById('cfl-view-cc'), document.getElementById('cfl-view-mlo'), document.getElementById('cfl-view-tl')];
+
+    if (state.quizMode) {
+      resultPanel.style.display = 'none';
+      quizPanel.style.display = '';
+      toggleBtn.textContent = 'Exit quiz';
+      toggleBtn.classList.remove('cfl-btn-primary');
+      sideSel.disabled = true;
+      angleInp.disabled = true;
+      resetBtn.disabled = true;
+      showNumCb.disabled = true;
+      views.forEach(v => v.classList.add('quiz-mode'));
+
+      document.getElementById('quiz-side-display').textContent = state.quizQuestion.side;
+      document.getElementById('quiz-angle-display').textContent = state.quizQuestion.angleDeg + '°';
+      document.getElementById('quiz-score').textContent = `${state.quizScore.correct} / ${state.quizScore.total}`;
+
+      const buttons = document.querySelectorAll('.quiz-answer-btn');
+      buttons.forEach(btn => {
+        const h = parseInt(btn.dataset.h);
+        btn.classList.remove('correct', 'incorrect');
+        btn.disabled = state.quizRevealed;
+        if (state.quizRevealed) {
+          if (h === state.quizQuestion.targetHour) btn.classList.add('correct');
+          else if (h === state.quizSelected) btn.classList.add('incorrect');
+        }
+      });
+
+      const fb = document.getElementById('quiz-feedback');
+      fb.className = 'quiz-feedback';
+      if (state.quizRevealed) {
+        if (state.quizSelected === state.quizQuestion.targetHour) {
+          fb.textContent = `✓ Correct — ${state.quizQuestion.targetHour} o'clock.`;
+          fb.classList.add('correct');
+        } else if (state.quizSelected === null) {
+          fb.textContent = `Answer: ${state.quizQuestion.targetHour} o'clock.`;
+          fb.classList.add('revealed');
+        } else {
+          fb.textContent = `✗ Answer was ${state.quizQuestion.targetHour} o'clock (you chose ${state.quizSelected}).`;
+          fb.classList.add('incorrect');
+        }
+        document.getElementById('cfl-quiz-next').style.display = '';
+        document.getElementById('cfl-quiz-reveal').style.display = 'none';
+        drawClock(state.quizQuestion.targetHour);
+      } else {
+        fb.textContent = '';
+        document.getElementById('cfl-quiz-next').style.display = 'none';
+        document.getElementById('cfl-quiz-reveal').style.display = '';
+        drawClock(null);
+      }
+    } else {
+      resultPanel.style.display = '';
+      quizPanel.style.display = 'none';
+      toggleBtn.textContent = 'Start quiz';
+      toggleBtn.classList.add('cfl-btn-primary');
+      sideSel.disabled = false;
+      angleInp.disabled = false;
+      resetBtn.disabled = false;
+      showNumCb.disabled = false;
+      views.forEach(v => v.classList.remove('quiz-mode'));
+    }
+  }
+  function redraw() {
+    drawCC(); drawMLO(); drawTL();
+    if (!state.quizMode) updateResultPanel();
+  }
+
+  svCC.addEventListener('click', e => { if (state.quizMode) return; state.ccClick = svgCoords(svCC, e); redraw(); });
+  svML.addEventListener('click', e => { if (state.quizMode) return; state.mloClick = svgCoords(svML, e); redraw(); });
+  svTL.addEventListener('click', e => { if (state.quizMode) return; state.tlClick = svgCoords(svTL, e); redraw(); });
+  document.getElementById('cfl-side').addEventListener('change', e => {
+    if (state.quizMode) return;
+    state.side = e.target.value;
+    state.ccClick = null; state.mloClick = null; state.tlClick = null;
+    redraw();
+  });
+  document.getElementById('cfl-angle').addEventListener('input', e => {
+    if (state.quizMode) return;
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v >= 20 && v <= 75) {
+      state.mloAngleDeg = v;
+      document.getElementById('cfl-angle-out').textContent = v + '°';
+      redraw();
+    }
+  });
+  document.getElementById('cfl-show-numbers').addEventListener('change', e => {
+    state.showNumbers = e.target.checked;
+    redraw();
+  });
+  document.getElementById('cfl-reset').addEventListener('click', () => {
+    if (state.quizMode) return;
+    state.ccClick = null; state.mloClick = null; state.tlClick = null;
+    redraw();
+  });
+  document.getElementById('cfl-quiz-toggle').addEventListener('click', () => {
+    if (state.quizMode) endQuiz(); else startQuiz();
+  });
+  document.getElementById('cfl-quiz-next').addEventListener('click', nextQuestion);
+  document.getElementById('cfl-quiz-reveal').addEventListener('click', revealAnswer);
+
+  // Keyboard: 1-9 for hours 1-9, 0=10, -=11, ==12, Enter/Space = next
+  document.addEventListener('keydown', e => {
+    if (!state.quizMode) return;
+    if (state.quizRevealed && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      nextQuestion();
+      return;
+    }
+    if (state.quizRevealed) return;
+    const map = { '1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'0':10,'-':11,'=':12 };
+    if (map[e.key]) { e.preventDefault(); submitAnswer(map[e.key]); }
+  });
+
+  buildAnswerButtons();
+  updateUI();
+  redraw();
+})();
+</script>
+</body>
+</html>
